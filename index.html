@@ -297,7 +297,12 @@
 
     function renderHome() {
       const container = document.createElement('div');
-      container.className = 'snap-y snap-mandatory h-screen overflow-y-auto touch-pan-y';
+// fazer o container da home ocupar a viewport menos a altura do header (pt-24 = 6rem),
+// assim não sobra espaço extra e o body não cria outra barra de rolagem.
+container.className = 'snap-y snap-mandatory touch-pan-y';
+container.style.height = 'calc(100vh - 6rem)';
+container.style.overflowY = 'auto';
+container.style.webkitOverflowScrolling = 'touch';
 
       // Hero
       const hero = document.createElement('section');
