@@ -6,6 +6,29 @@
   <title>JFG Metais — Demo (React → HTML) - Loja</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    /* --- layout fixes to avoid double-scroll --- */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* IMPORTANT: body must NOT scroll; main will scroll */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .app-root { /* root that fills viewport and provides layout */
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-main { /* MAIN becomes the single scroll container */
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+
     /* Helper transitions */
     .fade-enter { opacity: 0; transform: translateY(10px); transition: all .22s ease; }
     .fade-enter.fade-enter-active { opacity: 1; transform: translateY(0); }
@@ -21,20 +44,383 @@
     .cart-items { overflow:auto; max-height:36vh; }
     .overlay-backdrop { background: rgba(0,0,0,0.45); position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:60; }
     .detail-card { width:95%; max-width:900px; max-height:90vh; overflow:auto; border-radius:12px; background:#fff; padding:1rem; box-shadow:0 18px 60px rgba(0,0,0,0.3); }
+
+    /* keep header above the main content */
+    header.fixed { position: fixed; top: 0; left: 0; right: 0; z-index: 40; }
   </style>
 </head>
-<body class="min-h-screen bg-gray-50 text-gray-900">
+<body class="bg-gray-50 text-gray-900">
 
   <div id="app"></div>
 
   <script>
-    /*************************
+    /*********
      * Config / Dados
-     *************************/
+     *********/
     const BRAND = {
       name: 'JFG Metais',
       phone: '+55 11 94214-7315',
       waNumberClean: '5511974177315',
+      heroTags: ['JFG Metais', 'Loja Online', 'Faça Seu Pedido', 'Qualidade Garantida'],
+      logoImage: 'logo.png',
+    };
+
+    const productsSeed = [
+      { id: 1, title: 'Grapa Reta 5cm', basePrice: 0.50, images: ['https://via.placeholder.com/800x800?text=Grapa+1-1','https://via.placeholder.com/800x800?text=Grapa+1-2'], category: 'Grapas', tag: 'Destaque', excerpt: 'Grapa em aço carbono, resistente para fixações.', sizes: [{ id: 'p100', label: 'P (50 unid)', price: 24.9 },{ id: 'm100', label: 'M (100 unid)', price: 44.9 },{ id: 'g200', label: 'G (200 unid)', price: 79.9 }] },
+      { id: 2, title: 'Mão Francesa Média', basePrice: 19.9, images: ['https://via.placeholder.com/800x800?text=Mao+Francesa+1'], category: 'Mão francesas', tag: 'Promo', excerpt: 'Suporte em L com pintura eletrostática.', sizes: [{ id: '30', label: '30 cm', price: 19.9 },{ id: '40', label: '40 cm', price: 24.9 },{ id: '50', label: '50 cm', price: 29.9 }] },
+      { id: 3, title: 'Cavalete de Obras', basePrice: 129.0, images: ['https://via.placeholder.com/800x800?text=Cavalete+1','https://via.placeholder.com/800x800?text=Cavalete+2'], category: 'Cavaletes', tag: '', excerpt: 'Cavalete dobrável, ideal para canteiro.', sizes: [{ id: '1m', label: '1 m', price: 129.0 },{ id: '1.5m', label: '1.5 m', price: 149.0 }] },
+    ];
+
+    const productsFull = [
+      ...productsSeed,
+      { id: 4, title: 'Kit Acessórios de Fixação', basePrice: 39.9, images: ['https://via.placeholder.com/800x800?text=Acessorio+1','https://via.placeholder.com/800x800?text=Acessorio+2','https://via.placeholder.com/800x800?text=Acessorio+3'], category: 'Acessórios', tag: 'Novo', excerpt: 'Parafusos, buchas e pequenos itens para acabamento.', sizes: [{ id: 'mini', label: 'Mini (50 pcs)', price: 19.9 },{ id: 'standard', label: 'Padrão (150 pcs)', price: 39.9 },{ id: 'pro', label: 'Pro (300 pcs)', price: 69.9 }] },
+      { id: 5, title: 'Grapa Curvada 7cm', basePrice: 0.75, images: ['https://via.placeholder.com/800x800?text=Grapa+2-1'], category: 'Grapas', tag: '', excerpt: 'Grapa com curvatura para aplicações especiais.', sizes: [{ id: 'p50', label: 'P (50 unid)', price: 29.9 },{ id: 'm100', label: 'M (100 unid)', price: 54.9 }] },
+      { id: 6, title: 'Mão Francesa Reforçada', basePrice: 34.9, images: ['https://via.placeholder.com/800x800?text=Mao+2-1','https://via.placeholder.com/800x800?text=Mao+2-2'], category: 'Mão francesas', tag: 'Top', excerpt: 'Para cargas pesadas e prateleiras industriais.', sizes: [{ id: '40', label: '40 cm', price: 34.9 },{ id: '60', label: '60 cm', price: 49.9 }] },
+      { id: 7, title: 'Cavalete Metálico Profissional', basePrice: 199.0, images: ['https://via.placeholder.com/800x800?text=Cavalete+Prof'], category: 'Cavaletes', tag: '', excerpt: 'Construção robusta para uso profissional.', sizes: [{ id: '1.2m', label: '1.2 m', price: 199.0 },{ id: '2m', label: '2 m', price: 249.0 }] },
+    ];
+
+    /*********
+     * Estado
+     *********/
+    let route = 'home';
+    let products = [...productsFull];
+    let featured = [...productsSeed];
+    let cart = JSON.parse(localStorage.getItem('jfg_cart') || '[]');
+    let toastMsg = '';
+    let toastTimer = null;
+    let heroIndex = 0;
+    let productDetailOverlay = null;
+    let cartMinimized = false; // controla estado minimizado do popup
+
+    /*********
+     * Utilitários
+     *********/
+    function $(sel, ctx=document) { return ctx.querySelector(sel); }
+    function $all(sel, ctx=document) { return Array.from((ctx || document).querySelectorAll(sel)); }
+    function saveCart() { localStorage.setItem('jfg_cart', JSON.stringify(cart)); }
+    function totalCount() { return cart.reduce((s,it)=>s + (it.qty||0), 0); }
+    function totalPrice() { return cart.reduce((s,it)=>s + (it.price||0)*(it.qty||0), 0); }
+
+    function showToast(message) {
+      toastMsg = message;
+      renderToast();
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=>{ toastMsg=''; renderToast(); }, 2600);
+    }
+
+    /*********
+     * Carrinho
+     *********/
+    function addToCart(product, chosenSizeId, qty = 1, options={fromDetail:false}) {
+      const size = (product.sizes || []).find(s => s.id === chosenSizeId) || (product.sizes && product.sizes[0]);
+      const price = size ? Number(size.price) : Number(product.basePrice || 0);
+      const key = ${product.id}::${size ? size.id : 'default'};
+      const found = cart.find(p => p.key === key);
+      if (found) {
+        found.qty = (found.qty || 1) + qty;
+      } else {
+        cart.push({
+          key,
+          id: product.id,
+          title: product.title + (size ? ` — ${size.label}` : ''),
+          price,
+          qty,
+          img: (product.images && product.images[0]) || '',
+          sizeId: size ? size.id : null
+        });
+      }
+      saveCart();
+      // se adicionou do detalhe, fechar detalhe automaticamente
+      if (options.fromDetail) {
+        closeProductDetail();
+      }
+      // atualizar UI
+      renderFloatingCart();
+      renderHeader();
+      showToast(${product.title} (${size ? size.label : 'Único'}) adicionado ao carrinho);
+    }
+
+    function updateQtyByKey(key, qty) {
+      const q = Number(qty);
+      if (isNaN(q) || q < 1) return;
+      cart = cart.map(p => p.key === key ? {...p, qty: q} : p);
+      saveCart();
+      renderFloatingCart();
+      renderHeader();
+    }
+
+    function changeQtyByKey(key, delta) {
+      cart = cart.map(p => p.key === key ? {...p, qty: Math.max(1, (p.qty||1)+delta)} : p);
+      saveCart();
+      renderFloatingCart();
+      renderHeader();
+    }
+
+    function removeFromCartByKey(key) {
+      cart = cart.filter(p => p.key !== key);
+      saveCart();
+      renderFloatingCart();
+      renderHeader();
+    }
+
+    function clearCart() {
+      cart = [];
+      saveCart();
+      renderFloatingCart();
+      renderHeader();
+    }
+
+    function checkoutToWhatsApp() {
+      if (!cart.length) { showToast('Seu carrinho está vazio ☺️'); return; }
+      const lines = [
+        'Olá, tenho interesse em comprar:',
+        ...cart.map((p,i) => ${i+1}) ${p.title} x${p.qty} — R$ ${(p.price * p.qty).toFixed(2)}),
+        Total: R$ ${totalPrice().toFixed(2)},
+        'Nome: ',
+        'Endereço: ',
+        'Observações: ',
+      ];
+      const text = encodeURIComponent(lines.join('\n'));
+      const wa = https://wa.me/${BRAND.waNumberClean}?text=${text};
+      window.open(wa, '_blank');
+    }
+
+    /*********
+     * Roteamento (hash)
+     *********/
+    function handleHashChange() {
+      const h = window.location.hash.replace('#','');
+      route = h || 'home';
+      // minimiza cart automaticamente em rotas específicas
+      if (['blog','about','careers'].includes(route)) {
+        cartMinimized = true;
+      } else {
+        cartMinimized = false;
+      }
+      renderApp();
+    }
+    window.addEventListener('hashchange', handleHashChange);
+
+    /*********
+     * Hero rotation
+     *********/
+    setInterval(() => {
+      heroIndex = (heroIndex + 1) % BRAND.heroTags.length;
+      const el = document.querySelector('[data-hero-tag]');
+      if (el) el.textContent = BRAND.heroTags[heroIndex];
+    }, 3000);
+
+    /*********
+     * Render principal
+     *********/
+    function renderApp() {
+      const root = document.getElementById('app');
+      // wrapper now uses .app-root so main can be the single scroll container
+      root.innerHTML = `
+        <div class="app-root">
+          ${renderHeaderHtml()}
+          <main id="main-content" class="app-main pt-24 snap-y snap-mandatory"></main>
+          ${renderFloatingCartHtml()}
+          ${renderFooterHtml()}
+          <div id="toast-root" class="fixed left-1/2 -translate-x-1/2 bottom-20 z-50"></div>
+          <div id="overlay-root"></div>
+        </div>
+      `;
+      attachHeaderEvents();
+      renderPageContent();
+      renderFloatingCart();
+      renderToast();
+    }
+
+    function renderHeaderHtml() {
+      return `
+        <header class="fixed inset-x-0 top-0 z-40 bg-white/90 backdrop-blur border-b">
+          <div class="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+            <div class="flex items-center gap-3">
+              <img src="${BRAND.logoImage}" alt="logo" class="w-10 h-10 rounded-full object-cover" onerror="this.src='https://via.placeholder.com/200x200?text=Logo'"/>
+              <div>
+                <div class="font-bold">${BRAND.name}</div>
+                <div class="text-xs text-gray-600">Aliança Ferragens • Qualidade Garantida</div>
+              </div>
+            </div>
+            <nav class="hidden sm:flex items-center gap-3 text-sm" role="navigation" aria-label="Main">
+              <button data-nav="home" class="px-2 py-1 rounded ${route==='home'?'bg-orange-100 text-orange-600':'text-gray-700'}">Home</button>
+              <button data-nav="shop" class="px-2 py-1 rounded ${route==='shop'?'bg-orange-100 text-orange-600':'text-gray-700'}">Loja</button>
+              <button data-nav="blog" class="px-2 py-1 rounded ${route==='blog'?'bg-orange-100 text-orange-600':'text-gray-700'}">Blog</button>
+              <button data-nav="about" class="px-2 py-1 rounded ${route==='about'?'bg-orange-100 text-orange-600':'text-gray-700'}">Sobre</button>
+              <button data-nav="careers" class="px-2 py-1 rounded ${route==='careers'?'bg-orange-100 text-orange-600':'text-gray-700'}">Trabalhe Conosco</button>
+              <div id="header-cart-count" class="ml-2 px-3 py-1 rounded-full bg-orange-500 text-white text-xs">Carrinho (${totalCount()})</div>
+            </nav>
+            <div class="sm:hidden flex items-center gap-2">
+              <button data-nav="shop" class="px-3 py-1 rounded-full bg-orange-500 text-white text-sm">Loja</button>
+              <button data-nav="careers" class="px-3 py-1 rounded-full border text-sm">Vagas</button>
+            </div>
+          </div>
+        </header>
+      `;
+    }
+
+    function attachHeaderEvents() {
+      const navBtns = document.querySelectorAll('[data-nav]');
+      navBtns.forEach(btn => {
+        btn.onclick = () => {
+          const dest = btn.getAttribute('data-nav');
+          route = dest;
+          // se for blog/about/careers, minimiza o cart
+          if (['blog','about','careers'].includes(dest)) cartMinimized = true;
+          else cartMinimized = false;
+          window.location.hash = dest;
+          renderApp();
+        };
+      });
+    }
+
+    function renderFooterHtml() {
+      return `
+        <footer class="mt-12 py-10">
+          <div class="max-w-6xl mx-auto text-center text-sm text-gray-600">
+            <div>© ${new Date().getFullYear()} ${BRAND.name} — Design inspirado em social feeds • Paleta laranja</div>
+            <div class="mt-3 flex items-center justify-center gap-3">
+              <button id="footer-about" class="underline">Sobre</button>
+              <button id="footer-careers" class="underline">Trabalhe Conosco</button>
+            </div>
+          </div>
+        </footer>
+      `;
+    }
+
+    function renderFloatingCartHtml() {
+      return <div id="floating-cart-root" class="fixed right-4 bottom-6 z-50"></div>;
+    }
+
+    /*********
+     * Paginas
+     *********/
+    function renderPageContent() {
+      const main = document.getElementById('main-content');
+      main.innerHTML = '';
+      if (route === 'home') {
+        main.appendChild(renderHome());
+      } else if (route === 'shop') {
+        main.appendChild(renderShop());
+      } else if (route === 'blog') {
+        main.appendChild(renderBlog());
+      } else if (route === 'about') {
+        main.appendChild(renderAbout());
+      } else if (route === 'careers') {
+        main.appendChild(renderCareers());
+      } else {
+        main.appendChild(renderHome());
+      }
+
+      // footer buttons events
+      setTimeout(()=> {
+        const fa = document.getElementById('footer-about');
+        if (fa) fa.onclick = ()=> { window.location.hash='about'; route='about'; cartMinimized = true; renderApp(); };
+        const fc = document.getElementById('footer-careers');
+        if (fc) fc.onclick = ()=> { window.location.hash='careers'; route='careers'; cartMinimized = true; renderApp(); };
+      },0);
+    }
+
+    function renderHome() {
+      const container = document.createElement('div');
+      // Removed h-screen & overflow from here — main (app-main) is the scroll container now
+      container.className = 'touch-pan-y';
+
+      // Hero
+      const hero = document.createElement('section');
+      hero.className = 'snap-start min-h-[60vh] flex items-center justify-center px-4';
+      hero.innerHTML = `
+        <div class="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div class="space-y-4">
+            <span class="px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-semibold" data-hero-tag>${BRAND.heroTags[heroIndex]}</span>
+            <h1 data-hero-headline class="text-3xl md:text-5xl font-extrabold leading-tight transition-transform duration-300">As Melhores Grapas & Suportes</h1>
+            <p class="text-gray-600">Produzimos suportes e ferragens para marmoristas e construtoras. Venda por atacado e varejo, com garantia de qualidade.</p>
+            <div class="flex gap-3">
+              <button id="home-explore" data-tap class="px-4 py-2 rounded-full bg-orange-500 text-white font-semibold shadow">Explorar coleção</button>
+              <button id="home-saiba" class="px-4 py-2 rounded-full border">Saiba mais</button>
+            </div>
+          </div>
+          <div class="rounded-2xl overflow-hidden shadow-lg bg-white">
+            <img src="${BRAND.logoImage}" alt="hero" class="w-full h-[420px] object-cover" onerror="this.src='https://via.placeholder.com/800x420?text=Hero'"/>
+          </div>
+        </div>
+      `;
+      container.appendChild(hero);
+
+      // Destaques (home)
+      const highlights = document.createElement('section');
+      highlights.className = 'snap-start min-h-[70vh] px-4 py-6';
+      const cardsHtml = featured.map(p => renderProductCard(p).outerHTML).join('');
+      highlights.innerHTML = `
+        <div class="max-w-6xl mx-auto">
+          <h2 class="text-2xl font-bold mb-4">Destaques</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cardsHtml}</div>
+          <div class="mt-6 text-right">
+            <button id="ver-loja-home" class="px-4 py-2 rounded-full border">Ver todos os produtos</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(highlights);
+
+      // Avaliações -> CTA
+      const cta = document.createElement('section');
+      cta.className = 'snap-start min-h-[30vh] px-4 py-8 bg-white flex items-center';
+      cta.innerHTML = `
+        <div class="max-w-6xl mx-auto w-full flex items-center justify-between">
+          <div>
+            <h3 class="text-xl font-bold">Gostou da nossa loja?</h3>
+            <p class="text-gray-600">Deixe sua avaliação no WhatsApp — ajuda muito a gente crescer.</p>
+          </div>
+          <div>
+            <button id="cta-review" class="px-4 py-2 rounded-full bg-orange-500 text-white">Avaliar via WhatsApp</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(cta);
+
+      // Eventos
+      setTimeout(()=> {
+        const explore = container.querySelector('#home-explore');
+        if (explore) {
+          explore.onclick = () => { route='shop'; window.location.hash='shop'; cartMinimized = false; renderApp(); };
+          explore.addEventListener('mousedown', ()=> explore.classList.add('pressed'));
+          explore.addEventListener('mouseup', ()=> explore.classList.remove('pressed'));
+          explore.addEventListener('mouseleave', ()=> explore.classList.remove('pressed'));
+        }
+        const saiba = container.querySelector('#home-saiba');
+        if (saiba) saiba.onclick = ()=> { route='about'; window.location.hash='about'; cartMinimized = true; renderApp(); };
+
+        const verLoja = container.querySelector('#ver-loja-home');
+        if (verLoja) verLoja.onclick = ()=> { route='shop'; window.location.hash='shop'; cartMinimized = false; renderApp(); };
+
+        const ctaReview = container.querySelector('#cta-review');
+        if (ctaReview) ctaReview.onclick = ()=> {
+          const text = encodeURIComponent('Quero deixar uma avaliação: ');
+          window.open(https://wa.me/${BRAND.waNumberClean}?text=${text}, '_blank');
+        };
+      },0);
+
+      return container;
+    }
+
+    function renderShop() {
+      const container = document.createElement('div');
+      container.className = 'px-4 py-8';
+      container.innerHTML = `
+        <div class="max-w-6xl mx-auto">
+          <h2 class="text-3xl font-bold mb-4">Loja — Todos os Produtos</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${products.map(p => renderProductCard(p).outerHTML).join('')}
+          </div>
+        </div>
+      `;
+      // attach events for generated elements
+      setTimeout(()=> {
+        $all('.add-to-cart').forEach(btn => {
+          btn.onclick = (e) => {
+            const id = Number(btn.getAttribute('data-id'));
+            const      waNumberClean: '5511974177315',
       heroTags: ['JFG Metais', 'Loja Online', 'Faça Seu Pedido', 'Qualidade Garantida'],
       logoImage: 'logo.png',
     };
